@@ -43,8 +43,6 @@ WORKDIR /app
 # Copy installed packages from the builder stage
 COPY --from=builder /app /app
 
-# Ensure SQLite database file persists as a volume
-VOLUME ["/app/test.db"]
 
 # Expose the application on port 8000
 EXPOSE 8000

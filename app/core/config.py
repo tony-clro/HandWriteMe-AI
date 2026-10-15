@@ -22,6 +22,9 @@ class AppSettings(
     STORAGE_METHOD: str | None = "file"
     STORAGE_PATH: str | None = "./uploads"
 
+    # SQLite database default
+    SQLITE_DATABASE_URI: str = "sqlite:///./test.db"
+
     # Server-Sent Event Stream settings.
     STREAM_RETRY_TIMEOUT: int = 15000  # millisecond
     STREAM_DELAY: int = 1  # second
