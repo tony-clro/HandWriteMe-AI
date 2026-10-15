@@ -3,6 +3,8 @@ import logging
 import os
 import sys
 
+from msflib.account.actions import verify_password
+
 from app.actions import account_action
 from app.core.config import settings
 from app.db.session import Session, engine
@@ -61,6 +63,12 @@ def reset_superuser_password(
         if not account:
             logger.error("Administrator account with email '%s' was not found in the database.", target_email)
             return False
+
+        # Idempotency check: if the stored hash already verifies against target_password,
+        # skip re-hashing and repeated database writes across restarts/workers.
+        if account.hashed_password and verify_password(target_password, account.hashed_password):
+            logger.info("Administrator password for '%s' is already synchronized. Skipping update.", target_email)
+            return True
 
         account_action.update(
             s,

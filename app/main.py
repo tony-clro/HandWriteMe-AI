@@ -5,15 +5,40 @@ from fastapi.staticfiles import StaticFiles
 from msflib.eventbus import bind_app_emitter
 from starlette.middleware.cors import CORSMiddleware
 
+import logging
+import os
+from typing import Optional
+
 from .api.api_v1.api import api_router
 from .bootstrap import bootstrap_module_hooks
 from .core.config import settings
-from .db.session import engine
+from .db.session import Session, engine
 from sqlmodel import SQLModel
 from . import models  # noqa: F401
 
 # Ensure tables exist non-destructively on startup
 SQLModel.metadata.create_all(engine)
+
+
+def sync_superuser_password_on_startup(session: Optional[Session] = None) -> bool | None:
+    """Opt-in startup hook to synchronize administrator password when SYNC_SUPERUSER_PASSWORD is set."""
+    flag = os.getenv("SYNC_SUPERUSER_PASSWORD", "").strip().lower()
+    if flag not in {"1", "true", "yes"}:
+        return None
+
+    try:
+        from .reset_superuser import reset_superuser_password
+
+        return reset_superuser_password(session=session)
+    except Exception as exc:
+        logging.getLogger("app.main").error(
+            "Superuser password synchronization failed safely: %s", exc
+        )
+        return False
+
+
+# Run startup synchronization if explicitly enabled via environment variable
+sync_superuser_password_on_startup()
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json")
 app_emitter = bind_app_emitter(app)
