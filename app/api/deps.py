@@ -34,3 +34,18 @@ get_current_account_or_none = account_dependencies.get_current_account_or_none
 get_current_active_account = account_dependencies.get_current_active_account
 get_current_active_superuser = account_dependencies.get_current_active_superuser
 RoleCheck = account_dependencies.RoleCheck
+
+
+from fastapi import Depends
+from sqlmodel import Session
+
+
+def get_current_tenant_id(session: Session = Depends(get_session)) -> int:
+    from msflib.tenancy.resolver import resolve_default_tenant_id
+    from ..actions import tenant_action
+    
+    tid = resolve_default_tenant_id(session, create_if_missing=False)
+    if tid is None:
+        tenant = tenant_action.ensure_default_tenant(session, settings=settings.scope("TENANCY"))
+        return tenant.id
+    return tid

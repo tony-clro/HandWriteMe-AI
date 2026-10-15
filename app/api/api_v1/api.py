@@ -4,7 +4,7 @@ from msflib.auth.router import router as auth_router
 
 from app import models
 from app.api import deps
-from app.api.api_v1.endpoints import admin
+from app.api.api_v1.endpoints import admin, documents, handwriting_profiles
 from app.core.config import settings
 
 api_router = APIRouter()
@@ -51,3 +51,5 @@ api_router.include_router(
 )
 
 api_router.include_router(admin.router, prefix="/admin")
+api_router.include_router(handwriting_profiles.router, prefix="/handwriting-profiles", tags=["handwriting-profiles"])
+api_router.include_router(documents.router, prefix="/documents", tags=["documents"])

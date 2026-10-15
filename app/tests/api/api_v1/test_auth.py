@@ -52,3 +52,79 @@ def test_clear_access_token(
         headers=headers,
     )
     assert r4.status_code == 200
+
+
+def test_handwriting_profiles_unauthenticated_returns_401(client: TestClient) -> None:
+    response = client.get(f"{settings.API_V1_STR}/handwriting-profiles/")
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Not authenticated"
+
+
+def test_documents_unauthenticated_returns_401(client: TestClient) -> None:
+    response = client.get(f"{settings.API_V1_STR}/documents/")
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Not authenticated"
+
+
+def test_login_invalid_password_returns_400(client: TestClient) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/login",
+        data={
+            "username": settings.FIRST_SUPERUSER,
+            "password": "wrong-password-12345",
+        },
+    )
+    assert response.status_code == 400
+    assert "Incorrect email or password" in response.json()["detail"]
+
+
+def test_login_and_authenticated_endpoints(client: TestClient) -> None:
+    # 1. Login with valid seed superuser credentials
+    login_res = client.post(
+        f"{settings.API_V1_STR}/login",
+        data={
+            "username": settings.FIRST_SUPERUSER,
+            "password": settings.FIRST_SUPERUSER_PASSWORD,
+        },
+    )
+    assert login_res.status_code == 200
+    payload = login_res.json()
+    assert "access_token" in payload
+    assert payload.get("token_type") == "bearer"
+    token = payload["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2. Access handwriting profiles endpoint with valid bearer token
+    profiles_res = client.get(f"{settings.API_V1_STR}/handwriting-profiles/", headers=headers)
+    assert profiles_res.status_code == 200
+    assert isinstance(profiles_res.json(), list)
+
+    # 3. Access documents endpoint with valid bearer token
+    docs_res = client.get(f"{settings.API_V1_STR}/documents/", headers=headers)
+    assert docs_res.status_code == 200
+    assert isinstance(docs_res.json(), list)
+
+
+def test_sample_file_query_token_auth(
+    client: TestClient, superuser_account_token_headers: dict[str, str]
+) -> None:
+    # Unauthenticated request without token or header returns 401
+    unauth_res = client.get(f"{settings.API_V1_STR}/handwriting-profiles/1/samples/1/file")
+    assert unauth_res.status_code == 401
+    assert unauth_res.json()["detail"] == "Not authenticated"
+
+    # Request with invalid token returns 401
+    bad_token_res = client.get(
+        f"{settings.API_V1_STR}/handwriting-profiles/1/samples/1/file?token=invalid.jwt.token"
+    )
+    assert bad_token_res.status_code == 401
+
+    # Extract valid token from header
+    token = superuser_account_token_headers["Authorization"].split(" ")[1]
+    # Request with valid query parameter token passes auth (returns 404 because sample doesn't exist, NOT 401)
+    valid_token_res = client.get(
+        f"{settings.API_V1_STR}/handwriting-profiles/1/samples/1/file?token={token}"
+    )
+    assert valid_token_res.status_code == 404
+    assert valid_token_res.json()["detail"] == "Sample not found."
+

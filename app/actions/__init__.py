@@ -19,7 +19,16 @@ from ..models import (
     Workspace,
     WorkspaceCreate,
     WorkspaceUpdate,
+    HandwritingProfile,
+    HandwritingProfileCreate,
+    HandwritingProfileUpdate,
+    HandwritingSample,
+    HandwritingSampleCreate,
+    Document,
+    DocumentCreate,
+    DocumentUpdate,
 )
+from msflib.actions import ModelAction
 
 tenant_action = TenantAction[Tenant, TenantCreate, TenantUpdate]()
 
@@ -30,3 +39,13 @@ profile_action = ProfileAction[Profile, ProfileCreate, ProfileUpdate]()
 workspace_action = WorkspaceAction[Workspace, WorkspaceCreate, WorkspaceUpdate](settings=settings)
 
 user_action = UserAction[User, UserCreate, UserUpdate]()
+
+handwriting_profile_action = ModelAction[
+    HandwritingProfile, HandwritingProfileCreate, HandwritingProfileUpdate
+]()
+
+handwriting_sample_action = ModelAction[
+    HandwritingSample, HandwritingSampleCreate, HandwritingSampleCreate
+]()
+
+document_action = ModelAction[Document, DocumentCreate, DocumentUpdate]()
