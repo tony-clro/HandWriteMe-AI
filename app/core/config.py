@@ -22,6 +22,10 @@ class AppSettings(
     STORAGE_METHOD: str | None = "file"
     STORAGE_PATH: str | None = "./uploads"
 
+    # S3 / Cloudflare R2 Object Storage
+    STORAGE_BUCKET_NAME: str | None = None
+    AWS_ENDPOINT_URL_S3: str | None = None
+
     # SQLite database default
     SQLITE_DATABASE_URI: str = "sqlite:///./test.db"
 
