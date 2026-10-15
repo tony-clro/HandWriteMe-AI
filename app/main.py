@@ -12,12 +12,21 @@ from typing import Optional
 from .api.api_v1.api import api_router
 from .bootstrap import bootstrap_module_hooks
 from .core.config import settings
+from .db.init_db import init_db
 from .db.session import Session, engine
 from sqlmodel import SQLModel
 from . import models  # noqa: F401
 
-# Ensure tables exist non-destructively on startup
+logger = logging.getLogger("app.main")
+
+# 1. Ensure tables exist non-destructively on startup
 SQLModel.metadata.create_all(engine)
+
+# 2. Ensure initial administrator, default tenant, and workspace exist if not present
+try:
+    init_db(engine, create_tables=False)
+except Exception as exc:
+    logger.error("Database initialization failed safely: %s", exc)
 
 
 def sync_superuser_password_on_startup(session: Optional[Session] = None) -> bool | None:
@@ -31,13 +40,13 @@ def sync_superuser_password_on_startup(session: Optional[Session] = None) -> boo
 
         return reset_superuser_password(session=session)
     except Exception as exc:
-        logging.getLogger("app.main").error(
+        logger.error(
             "Superuser password synchronization failed safely: %s", exc
         )
         return False
 
 
-# Run startup synchronization if explicitly enabled via environment variable
+# 3. Run startup synchronization if explicitly enabled via environment variable
 sync_superuser_password_on_startup()
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json")

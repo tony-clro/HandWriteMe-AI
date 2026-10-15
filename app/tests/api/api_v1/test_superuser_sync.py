@@ -1,12 +1,15 @@
 import os
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, select
+from msflib.account.actions import verify_password
+from sqlmodel import SQLModel, Session, create_engine, select
 
-from app.actions import account_action
+from app import models
+from app.actions import account_action, user_action
 from app.core.config import settings
+from app.db.init_db import init_db
 from app.main import sync_superuser_password_on_startup
-from app.models import Account, AccountRole, AccountStatus
+from app.models import Account, AccountRole, AccountStatus, Tenant, User, Workspace
 from app.reset_superuser import reset_superuser_password
 
 
@@ -186,3 +189,179 @@ def test_startup_fails_safely_when_account_missing_or_password_invalid(
 
     result_invalid = sync_superuser_password_on_startup(session=session)
     assert result_invalid is False
+
+
+def test_first_startup_creates_default_records(tmp_path) -> None:
+    """Non-destructive startup initialization on a fresh database creates default records."""
+    db_file = tmp_path / "fresh_test.db"
+    test_engine = create_engine(
+        f"sqlite:///{db_file.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+
+    # 1. Non-destructively create schema
+    SQLModel.metadata.create_all(test_engine)
+
+    # 2. Run initialization with create_tables=False
+    init_db(test_engine, create_tables=False)
+
+    with Session(test_engine) as session:
+        # Administrator account created with correct configured credentials and roles
+        admin = account_action.get_by_email(session, email=settings.FIRST_SUPERUSER)
+        assert admin is not None
+        assert admin.email == settings.FIRST_SUPERUSER
+        assert admin.role == AccountRole.admin
+        assert admin.status == AccountStatus.active
+        assert admin.hashed_password is not None
+        assert verify_password(settings.FIRST_SUPERUSER_PASSWORD, admin.hashed_password)
+
+        # Default tenant exists
+        tenants = session.exec(select(Tenant)).all()
+        assert len(tenants) >= 1
+
+        # Default workspace exists owned by the administrator
+        workspaces = session.exec(select(Workspace).where(Workspace.owner_id == admin.id)).all()
+        assert len(workspaces) == 1
+        workspace = workspaces[0]
+        assert admin.current_workspace_id == workspace.id
+
+        # Workspace membership exists
+        membership = user_action.get_by_all(session, account_id=admin.id, workspace_id=workspace.id)
+        assert membership is not None
+
+
+def test_repeated_startup_does_not_create_duplicates(tmp_path) -> None:
+    """Repeated startup runs are completely idempotent and do not duplicate accounts, tenants, workspaces, or memberships."""
+    db_file = tmp_path / "idempotent_startup.db"
+    test_engine = create_engine(
+        f"sqlite:///{db_file.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+
+    SQLModel.metadata.create_all(test_engine)
+    init_db(test_engine, create_tables=False)
+
+    with Session(test_engine) as session:
+        initial_accounts = len(session.exec(select(Account)).all())
+        initial_tenants = len(session.exec(select(Tenant)).all())
+        initial_workspaces = len(session.exec(select(Workspace)).all())
+        initial_memberships = len(session.exec(select(User)).all())
+        admin = account_action.get_by_email(session, email=settings.FIRST_SUPERUSER)
+        assert admin is not None
+        admin_id = admin.id
+
+    # Simulate second and third container restarts or multiple worker processes
+    init_db(test_engine, create_tables=False)
+    init_db(test_engine, create_tables=False)
+
+    with Session(test_engine) as session:
+        assert len(session.exec(select(Account)).all()) == initial_accounts
+        assert len(session.exec(select(Tenant)).all()) == initial_tenants
+        assert len(session.exec(select(Workspace)).all()) == initial_workspaces
+        assert len(session.exec(select(User)).all()) == initial_memberships
+
+        refreshed_admin = account_action.get_by_email(session, email=settings.FIRST_SUPERUSER)
+        assert refreshed_admin is not None
+        assert refreshed_admin.id == admin_id
+
+
+def test_existing_administrator_preserved_on_repeated_startup(tmp_path) -> None:
+    """When an administrator account already exists, init_db does not alter or reset their password."""
+    db_file = tmp_path / "preserve_existing.db"
+    test_engine = create_engine(
+        f"sqlite:///{db_file.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+
+    SQLModel.metadata.create_all(test_engine)
+    init_db(test_engine, create_tables=False)
+
+    custom_password = "CustomSuperuserPassword!123"
+    with Session(test_engine) as session:
+        admin = account_action.get_by_email(session, email=settings.FIRST_SUPERUSER)
+        assert admin is not None
+        # Update administrator password to something different from FIRST_SUPERUSER_PASSWORD
+        account_action.update(session, model=admin, data=models.AccountUpdate(new_password=custom_password))
+        session.commit()
+
+        session.refresh(admin)
+        assert verify_password(custom_password, admin.hashed_password)
+        stored_hash = admin.hashed_password
+
+    # Re-run init_db (e.g. app restart)
+    init_db(test_engine, create_tables=False)
+
+    with Session(test_engine) as session:
+        admin_after = account_action.get_by_email(session, email=settings.FIRST_SUPERUSER)
+        assert admin_after is not None
+        # Password must not have been reverted to settings.FIRST_SUPERUSER_PASSWORD
+        assert admin_after.hashed_password == stored_hash
+        assert verify_password(custom_password, admin_after.hashed_password)
+
+
+def test_create_tables_false_cannot_drop_or_recreate_existing_tables(tmp_path) -> None:
+    """Verifies that create_tables=False never drops tables or existing user data."""
+    db_file = tmp_path / "no_drop.db"
+    test_engine = create_engine(
+        f"sqlite:///{db_file.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+
+    SQLModel.metadata.create_all(test_engine)
+    init_db(test_engine, create_tables=False)
+
+    # Insert a normal account into the database
+    with Session(test_engine) as session:
+        normal_account = account_action.create(
+            session,
+            data=models.AccountCreate(
+                username="user@example.com",
+                email="user@example.com",
+                phone="+15551234567",
+                password="UserPassword123!",
+                status=AccountStatus.active,
+                role=AccountRole.user,
+                profile=models.ProfileCreate(first_name="Normal", last_name="User"),
+            ),
+        )
+        session.commit()
+        user_id = normal_account.id
+
+    # Run init_db with create_tables=False
+    init_db(test_engine, create_tables=False)
+
+    with Session(test_engine) as session:
+        rechecked_user = account_action.get_by_email(session, email="user@example.com")
+        assert rechecked_user is not None
+        assert rechecked_user.id == user_id
+
+
+def test_startup_initialization_sequence_end_to_end(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simulates Render container cold boot: creates schema, bootstraps admin, then synchronizes password."""
+    db_file = tmp_path / "cold_boot.db"
+    test_engine = create_engine(
+        f"sqlite:///{db_file.as_posix()}",
+        connect_args={"check_same_thread": False},
+    )
+
+    render_new_password = "RenderSynchronizedPassword!789"
+    monkeypatch.setenv("SYNC_SUPERUSER_PASSWORD", "true")
+    monkeypatch.setenv("FIRST_SUPERUSER_PASSWORD", render_new_password)
+    monkeypatch.setattr(settings, "FIRST_SUPERUSER_PASSWORD", render_new_password)
+
+    # 1. DDL: Create schema
+    SQLModel.metadata.create_all(test_engine)
+
+    # 2. Seed default admin, tenant, workspace
+    init_db(test_engine, create_tables=False)
+
+    # 3. Synchronize password hook
+    with Session(test_engine) as session:
+        sync_result = sync_superuser_password_on_startup(session=session)
+        assert sync_result is True
+
+        admin = account_action.get_by_email(session, email=settings.FIRST_SUPERUSER)
+        assert admin is not None
+        # Admin is immediately authenticated with the synchronized password
+        assert verify_password(render_new_password, admin.hashed_password)
+
