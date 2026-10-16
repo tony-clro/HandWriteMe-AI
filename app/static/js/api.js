@@ -87,6 +87,29 @@ class ApiClient {
   }
 
   // --- AUTH ---
+  async register(data) {
+    const res = await fetch(`${this.baseUrl}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      let errDetail = "Registration failed";
+      try {
+        const errJson = await res.json();
+        if (Array.isArray(errJson.detail)) {
+          errDetail = errJson.detail.map((d) => d.msg || d.message).join(", ");
+        } else if (errJson.detail) {
+          errDetail = errJson.detail;
+        }
+      } catch (_) {}
+      throw new Error(errDetail);
+    }
+
+    return await res.json();
+  }
+
   async login(username, password) {
     const formData = new URLSearchParams();
     formData.append("username", username);

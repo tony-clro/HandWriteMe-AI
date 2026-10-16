@@ -18,6 +18,10 @@ class AppSettings(
     EMAIL_TEMPLATES_DIR: str = "./app/email-templates/build"
     PASSWORD_RESET_PATH: str = "/password-reset"
 
+    # MSFLib Account registration
+    USERS_OPEN_REGISTRATION: bool = True
+    OPEN_REGISTRATION_PATH: str = "/register"
+
     # File storage
     STORAGE_METHOD: str | None = "file"
     STORAGE_PATH: str | None = "./uploads"

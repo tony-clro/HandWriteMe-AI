@@ -364,6 +364,7 @@ def generate_preview(
             "word_count": p.word_count,
             "lines": getattr(p, "lines", []),
             "vector_paths": getattr(p, "vector_paths", []),
+            "ai_line_indices": getattr(p, "ai_line_indices", []),
         }
         for p in engine_result.pages
     ]
@@ -379,6 +380,11 @@ def generate_preview(
         "profile_name": profile.name,
         "ink_color": config.ink_color,
         "font_size": config.font_size,
+        "line_spacing": config.line_spacing,
+        "margin_x": config.margin_x,
+        "margin_y": config.margin_y,
+        "page_width": config.page_width,
+        "page_height": config.page_height,
         "show_ruled_lines": config.show_ruled_lines,
         "pages": pages_list,
     }
@@ -514,12 +520,18 @@ def export_document_pdf(
     if not doc.extracted_text and not doc.preview_data_json:
         raise HTTPException(status_code=400, detail="Document contains no text to export.")
 
-    # Retrieve lines, style, profile, ink color, and vector paths from existing preview data if available
+    # Retrieve lines, style, profile, ink color, geometry, and vector paths from existing preview data if available
     pages_lines: List[List[str]] = []
     pages_vector_paths: List[List[List[dict]]] = []
+    pages_ai_line_indices: List[List[int]] = []
     profile_name = "HandWriteMe"
     ink_color = "#1a237e"
-    font_size = 14
+    font_size = 22
+    line_spacing = 1.6
+    margin_x = 60.0
+    margin_y = 80.0
+    page_width = 800.0
+    page_height = 1100.0
     show_ruled_lines = True
 
     if doc.preview_data_json:
@@ -527,6 +539,12 @@ def export_document_pdf(
             preview_data = json.loads(doc.preview_data_json)
             profile_name = preview_data.get("profile_name", profile_name)
             ink_color = preview_data.get("ink_color", ink_color)
+            font_size = preview_data.get("font_size", font_size)
+            line_spacing = float(preview_data.get("line_spacing", line_spacing))
+            margin_x = float(preview_data.get("margin_x", margin_x))
+            margin_y = float(preview_data.get("margin_y", margin_y))
+            page_width = float(preview_data.get("page_width", page_width))
+            page_height = float(preview_data.get("page_height", page_height))
             show_ruled_lines = preview_data.get("show_ruled_lines", True)
             raw_pages = preview_data.get("pages", [])
             for page_dict in raw_pages:
@@ -534,11 +552,13 @@ def export_document_pdf(
                 if lines:
                     pages_lines.append(lines)
                 vp = page_dict.get("vector_paths")
-                if vp:
-                    pages_vector_paths.append(vp)
+                pages_vector_paths.append(vp if vp else [])
+                ai_indices = page_dict.get("ai_line_indices", [])
+                pages_ai_line_indices.append(ai_indices)
         except Exception:
             pages_lines = []
             pages_vector_paths = []
+            pages_ai_line_indices = []
 
     if not pages_lines and doc.extracted_text:
         pages_lines = pdf_writer_service.wrap_text_into_pages(doc.extracted_text)
@@ -546,14 +566,23 @@ def export_document_pdf(
     if not pages_lines:
         pages_lines = [[""]]
 
+    has_any_vectors = any(bool(vp) for vp in pages_vector_paths)
+    has_any_indices = any(bool(idx) for idx in pages_ai_line_indices)
+
     pdf_bytes = pdf_writer_service.generate_pdf_bytes(
         pages_lines=pages_lines,
         title=f"HandWriteMe - {doc.filename}",
         profile_name=profile_name,
         ink_color=ink_color,
         font_size=font_size,
+        line_spacing=line_spacing,
         show_ruled_lines=show_ruled_lines,
-        pages_vector_paths=pages_vector_paths if pages_vector_paths else None,
+        pages_vector_paths=pages_vector_paths if has_any_vectors else None,
+        pages_ai_line_indices=pages_ai_line_indices if has_any_indices else None,
+        svg_page_width=page_width,
+        svg_page_height=page_height,
+        svg_margin_x=margin_x,
+        svg_margin_y=margin_y,
     )
 
     clean_stem = doc.filename.rsplit(".", 1)[0].strip().replace(" ", "_")

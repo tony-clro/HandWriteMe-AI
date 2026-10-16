@@ -38,6 +38,7 @@ class PagePreview:
     word_count: int
     lines: List[str] = field(default_factory=list)
     vector_paths: List[List[Dict[str, float]]] = field(default_factory=list)
+    ai_line_indices: List[int] = field(default_factory=list)
 
 
 @dataclass
@@ -198,6 +199,7 @@ class HandwritingEngineService:
 
             # 3. Text lines: synthesize using pretrained AI neural network with fallback to parameter engine
             page_vector_paths: List[List[Dict[str, float]]] = []
+            page_ai_line_indices: List[int] = []
 
             for l_idx, line in enumerate(p_lines):
                 if not line:
@@ -241,6 +243,7 @@ class HandwritingEngineService:
                                 svg_elements.append("\n".join(line_elements))
 
                                 page_vector_paths.extend(segs)
+                                page_ai_line_indices.append(l_idx)
                                 total_ai_lines_rendered += 1
                                 rendered_ai = True
                     except Exception as exc:
@@ -308,6 +311,7 @@ class HandwritingEngineService:
                     word_count=page_words,
                     lines=p_lines,
                     vector_paths=page_vector_paths,
+                    ai_line_indices=page_ai_line_indices,
                 )
             )
 

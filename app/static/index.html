@@ -438,21 +438,28 @@
     </main>
   </div>
 
-  <!-- Login Modal -->
+  <!-- Auth Modal (Sign In & Sign Up) -->
   <div id="loginModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(6px); z-index: 200; align-items: center; justify-content: center;">
-    <div class="card" style="width: 100%; max-width: 420px; margin: 1rem; border-color: rgba(99, 102, 241, 0.3);">
-      <div class="card-title">
-        <span>Sign In to MSFLib</span>
+    <div class="card" style="width: 100%; max-width: 440px; margin: 1rem; border-color: rgba(99, 102, 241, 0.3);">
+      <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="authModalTitle">Sign In to HandWriteMe</span>
         <button id="btnCloseLogin" style="background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;">&times;</button>
       </div>
 
+      <!-- Auth Tabs -->
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+        <button type="button" id="tabSignIn" class="btn" style="flex: 1; padding: 0.5rem; font-size: 0.875rem; background: var(--accent-indigo); color: white;">Sign In</button>
+        <button type="button" id="tabSignUp" class="btn" style="flex: 1; padding: 0.5rem; font-size: 0.875rem; background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border-color);">Create Account</button>
+      </div>
+
       <div id="loginPromptNotice" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-        Authenticate with your MSFLib superuser account to manage profiles, documents, and synthesis.
+        Authenticate with your account to manage profiles, documents, and synthesis.
       </div>
 
       <div id="loginErrorBox" style="display: none; background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.35); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 1rem; color: #fda4af; font-size: 0.825rem; line-height: 1.4;">
       </div>
 
+      <!-- Sign In Form -->
       <form id="loginForm">
         <div class="form-group">
           <label class="form-label" for="loginEmail">Email / Username *</label>
@@ -461,14 +468,39 @@
 
         <div class="form-group">
           <label class="form-label" for="loginPassword">Password *</label>
-          <input type="password" id="loginPassword" placeholder="Enter superuser password" autocomplete="current-password" required>
+          <input type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password" required>
         </div>
 
         <button type="submit" class="btn btn-primary" id="btnSubmitLogin" style="width: 100%;">Sign In</button>
       </form>
 
-      <p style="font-size: 0.775rem; color: var(--text-subtle); margin-top: 1rem; line-height: 1.4; text-align: center;">
-        Initial credentials are configured in your <code>.env</code> file (<code>FIRST_SUPERUSER</code> and <code>FIRST_SUPERUSER_PASSWORD</code>).
+      <!-- Sign Up Form (hidden by default) -->
+      <form id="registerForm" style="display: none;">
+        <div class="form-group">
+          <label class="form-label" for="signupName">Full Name</label>
+          <input type="text" id="signupName" placeholder="e.g. Jane Doe" autocomplete="name">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="signupEmail">Email Address *</label>
+          <input type="email" id="signupEmail" placeholder="jane@example.com" autocomplete="email" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="signupPassword">Password * (minimum 8 characters)</label>
+          <input type="password" id="signupPassword" placeholder="Create a secure password" autocomplete="new-password" minlength="8" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="signupPasswordConfirm">Confirm Password *</label>
+          <input type="password" id="signupPasswordConfirm" placeholder="Re-enter password" autocomplete="new-password" minlength="8" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="btnSubmitRegister" style="width: 100%;">Create Account</button>
+      </form>
+
+      <p id="authHelperNotice" style="font-size: 0.775rem; color: var(--text-subtle); margin-top: 1rem; line-height: 1.4; text-align: center;">
+        New users receive an isolated personal workspace for private handwriting synthesis.
       </p>
     </div>
   </div>

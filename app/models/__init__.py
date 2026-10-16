@@ -46,3 +46,4 @@ from .handwriting_sample import (
     HandwritingSampleCreate,
     HandwritingSampleRead,
 )
+from .user_register import UserRegister

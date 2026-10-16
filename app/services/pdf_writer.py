@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import io
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 
 def hex_to_rgb(hex_str: str) -> Tuple[float, float, float]:
@@ -29,7 +29,7 @@ class PDFWriterService:
     @staticmethod
     def wrap_text_into_pages(
         text: str,
-        chars_per_line: int = 58,
+        chars_per_line: int = 56,
         lines_per_page: int = 26,
     ) -> List[List[str]]:
         """Cleanly wrap raw text into structured pages and lines without splitting words."""
@@ -72,35 +72,41 @@ class PDFWriterService:
         pages_lines: List[List[str]],
         title: str = "HandWriteMe Generated Document",
         profile_name: str = "HandWriteMe",
-        font_size: int = 14,
-        line_height: int = 24,
+        font_size: int = 22,
+        line_height: Optional[float] = None,
+        line_spacing: float = 1.6,
         ink_color: str = "#1a237e",
         show_ruled_lines: bool = True,
         pages_vector_paths: Optional[List[List[List[dict]]]] = None,
+        pages_ai_line_indices: Optional[List[List[int]]] = None,
+        svg_page_width: float = 800.0,
+        svg_page_height: float = 1100.0,
+        svg_margin_x: float = 60.0,
+        svg_margin_y: float = 80.0,
     ) -> bytes:
         # Standard US Letter dimensions (612 x 792 pt, 8.5 x 11 in)
         page_width = 612
         page_height = 792
-        margin_left = 54
-        margin_top = 70
-        lines_per_page = 26
 
-        # SVG to PDF scale factors (SVG is 800 x 1100, PDF US Letter is 612 x 792)
-        scale_x = page_width / 800.0
-        scale_y = page_height / 1100.0
+        # Scale factors mapping SVG coordinates (default 800 x 1100) to US Letter (612 x 792)
+        scale_x = page_width / float(svg_page_width)
+        scale_y = page_height / float(svg_page_height)
+
+        # SVG line geometry matching handwriting engine
+        if font_size > 18:
+            svg_line_height = float(font_size) * float(line_spacing)
+            pdf_font_size = max(11, int(round(font_size * scale_y)))
+        else:
+            # Backwards compatibility when scaled font_size (e.g. 14) is passed directly
+            pdf_font_size = font_size
+            svg_line_height = (line_height / scale_y) if line_height else (22.0 * line_spacing)
+
+        usable_height = svg_page_height - (svg_margin_y * 2)
+        lines_per_page = max(5, int(usable_height / svg_line_height))
 
         ink_r, ink_g, ink_b = hex_to_rgb(ink_color)
 
         total_pages = max(1, len(pages_lines))
-        # Objects layout:
-        # 1: Catalog
-        # 2: Outlines
-        # 3: Pages tree
-        # 4: Handwriting Font (Times-Italic for cursive manuscript look)
-        # 5: Secondary Font (Helvetica for header/footer)
-        # For each page i (0-indexed):
-        #   6 + 2*i: Content Stream
-        #   7 + 2*i: Page object
         page_obj_ids = [7 + (2 * i) for i in range(total_pages)]
 
         objects = {}
@@ -115,10 +121,10 @@ class PDFWriterService:
         kids_str = " ".join(f"{pid} 0 R" for pid in page_obj_ids)
         objects[3] = f"<< /Type /Pages /Kids [{kids_str}] /Count {total_pages} >>".encode("ascii")
 
-        # 4. Base-14 Handwriting Font (Times-Italic)
+        # 4. Base-14 Handwriting Font (Times-Italic for cursive manuscript look)
         objects[4] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Italic >>"
 
-        # 5. Base-14 Clean Font (Helvetica)
+        # 5. Base-14 Clean Font (Helvetica for header/footer)
         objects[5] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
 
         # For each page, create Content Stream and Page Object
@@ -129,15 +135,24 @@ class PDFWriterService:
             # 1. Soft notebook paper background (#fbf9f4)
             stream_parts.append(f"q 0.984 0.976 0.957 rg 0 0 {page_width} {page_height} re f Q")
 
-            # 2. Ruled lines & red left margin guide matching preview
+            # 2. Ruled lines & red left margin guide matching preview geometry precisely
             if show_ruled_lines:
                 # Vertical red margin line
-                stream_parts.append(f"q 0.949 0.545 0.510 RG 1.2 w 45 0 m 45 {page_height} l S Q")
+                margin_line_x = (svg_margin_x - 12.0) * scale_x
+                stream_parts.append(
+                    f"q 0.949 0.545 0.510 RG 0.92 w {margin_line_x:.2f} 0 m {margin_line_x:.2f} {page_height} l S Q"
+                )
 
-                # Horizontal blue ruled notebook lines
-                for l_idx in range(lines_per_page):
-                    ly = page_height - margin_top - (l_idx * line_height)
-                    stream_parts.append(f"q 0.761 0.820 0.878 RG 0.75 w 36 {ly:.2f} m 576 {ly:.2f} l S Q")
+                # Horizontal blue ruled notebook lines matching preview positions
+                x_start = max(18.0, (svg_margin_x - 20.0) * scale_x)
+                x_end = min(page_width - 18.0, (svg_page_width - svg_margin_x + 20.0) * scale_x)
+                for l_idx in range(lines_per_page + 1):
+                    svg_ly = svg_margin_y + (l_idx * svg_line_height)
+                    pdf_ly = page_height - (svg_ly * scale_y)
+                    if 0 <= pdf_ly <= page_height:
+                        stream_parts.append(
+                            f"q 0.761 0.820 0.878 RG 0.60 w {x_start:.2f} {pdf_ly:.2f} m {x_end:.2f} {pdf_ly:.2f} l S Q"
+                        )
 
             # Check if genuine vector stroke paths exist for this page
             page_vectors = (
@@ -145,6 +160,11 @@ class PDFWriterService:
                 if pages_vector_paths and i < len(pages_vector_paths) and pages_vector_paths[i]
                 else None
             )
+
+            # Track which lines have vector strokes
+            ai_line_indices: set[int] = set()
+            if pages_ai_line_indices and i < len(pages_ai_line_indices) and pages_ai_line_indices[i]:
+                ai_line_indices = set(pages_ai_line_indices[i])
 
             if page_vectors:
                 # 3a. Genuine AI Vector Stroke Paths rendered natively in PDF
@@ -159,43 +179,53 @@ class PDFWriterService:
                         py = page_height - (pt["y"] * scale_y)
                         path_tokens.append(f"{px:.2f} {py:.2f} l")
                     stream_parts.append(
-                        f"q {ink_r:.3f} {ink_g:.3f} {ink_b:.3f} RG 1.2 w 1 J 1 j "
+                        f"q {ink_r:.3f} {ink_g:.3f} {ink_b:.3f} RG 1.35 w 1 J 1 j "
                         + " ".join(path_tokens)
                         + " S Q"
                     )
 
-                # Invisible searchable text underlay (rendering mode 3: neither fill nor stroke)
-                for l_idx, line in enumerate(lines):
-                    if not line:
-                        continue
-                    ly = page_height - margin_top - (l_idx * line_height)
-                    baseline_y = ly + 4
-                    safe = (
-                        line.replace("\\", "\\\\")
-                        .replace("(", "\\(")
-                        .replace(")", "\\)")
-                    )
-                    ascii_safe = safe.encode("ascii", "replace").decode("ascii")
-                    stream_parts.append(
-                        f"BT /F1 {font_size} Tf 3 Tr {margin_left} {baseline_y:.2f} Td ({ascii_safe}) Tj ET"
-                    )
-            else:
-                # 3b. Visible Fallback Font Text Lines sitting right on the ruled lines
-                for l_idx, line in enumerate(lines):
-                    if not line:
-                        continue
-                    ly = page_height - margin_top - (l_idx * line_height)
-                    baseline_y = ly + 4
+            # 3b. Text lines:
+            # - For lines with AI vector strokes: render invisible searchable text (rendering mode 3 Tr)
+            #   at the exact baseline so text extraction, screen readers, and search work seamlessly.
+            # - For lines without vector strokes (fallback / parameter lines): render visible text (mode 0 rg)
+            #   so NO lines are missing or invisible in the exported PDF.
+            pdf_margin_left = svg_margin_x * scale_x
+            for l_idx, line in enumerate(lines):
+                if not line:
+                    continue
 
-                    safe = (
-                        line.replace("\\", "\\\\")
-                        .replace("(", "\\(")
-                        .replace(")", "\\)")
+                svg_baseline = svg_margin_y + (l_idx * svg_line_height)
+                pdf_baseline = page_height - (svg_baseline * scale_y)
+
+                safe = (
+                    line.replace("\\", "\\\\")
+                    .replace("(", "\\(")
+                    .replace(")", "\\)")
+                )
+                ascii_safe = safe.encode("ascii", "replace").decode("ascii")
+
+                # Determine if this specific line was rendered with vector strokes
+                line_has_vectors = False
+                if ai_line_indices:
+                    line_has_vectors = l_idx in ai_line_indices
+                elif page_vectors:
+                    # Backward compatibility fallback: check segment proximity
+                    line_has_vectors = any(
+                        abs(seg[0]["y"] - svg_baseline) < (svg_line_height * 0.75)
+                        for seg in page_vectors
+                        if seg
                     )
-                    ascii_safe = safe.encode("ascii", "replace").decode("ascii")
+
+                if line_has_vectors:
+                    # Invisible searchable text underlay (mode 3 Tr: neither fill nor stroke)
                     stream_parts.append(
-                        f"BT /F1 {font_size} Tf {ink_r:.3f} {ink_g:.3f} {ink_b:.3f} rg "
-                        f"{margin_left} {baseline_y:.2f} Td ({ascii_safe}) Tj ET"
+                        f"BT /F1 {pdf_font_size} Tf 3 Tr {pdf_margin_left:.2f} {pdf_baseline:.2f} Td ({ascii_safe}) Tj ET"
+                    )
+                else:
+                    # Visible text in ink color sitting directly on the ruled baseline
+                    stream_parts.append(
+                        f"BT /F1 {pdf_font_size} Tf {ink_r:.3f} {ink_g:.3f} {ink_b:.3f} rg "
+                        f"{pdf_margin_left:.2f} {pdf_baseline:.2f} Td ({ascii_safe}) Tj ET"
                     )
 
             # 4. Page footer with page number and profile name
@@ -207,9 +237,10 @@ class PDFWriterService:
                 .encode("ascii", "replace")
                 .decode("ascii")
             )
-            footer_x = max(180, (page_width // 2) - (len(safe_footer) * 3))
+            footer_x = max(36.0, (page_width // 2) - (len(safe_footer) * 2.8))
+            footer_y = max(16.0, page_height - (1075.0 * scale_y))
             stream_parts.append(
-                f"BT /F2 9 Tf 0.5 0.5 0.5 rg {footer_x} 24 Td ({safe_footer}) Tj ET"
+                f"BT /F2 8.5 Tf 0.5 0.5 0.5 rg {footer_x:.1f} {footer_y:.1f} Td ({safe_footer}) Tj ET"
             )
 
             stream_content = "\n".join(stream_parts).encode("latin-1")

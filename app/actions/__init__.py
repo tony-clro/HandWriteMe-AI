@@ -32,9 +32,11 @@ from msflib.actions import ModelAction
 
 tenant_action = TenantAction[Tenant, TenantCreate, TenantUpdate]()
 
-account_action = AccountAction[Account, AccountCreate, AccountUpdate](settings=settings)
-
 profile_action = ProfileAction[Profile, ProfileCreate, ProfileUpdate]()
+
+account_action = AccountAction[Account, AccountCreate, AccountUpdate](
+    settings=settings, profile_action=profile_action
+)
 
 workspace_action = WorkspaceAction[Workspace, WorkspaceCreate, WorkspaceUpdate](settings=settings)
 

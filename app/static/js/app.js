@@ -473,7 +473,62 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function openLoginModal(message = "") {
+  const tabSignIn = document.getElementById("tabSignIn");
+  const tabSignUp = document.getElementById("tabSignUp");
+  const registerForm = document.getElementById("registerForm");
+  const authModalTitle = document.getElementById("authModalTitle");
+  const authHelperNotice = document.getElementById("authHelperNotice");
+  const btnSubmitRegister = document.getElementById("btnSubmitRegister");
+
+  function setAuthMode(mode) {
+    if (loginErrorBox) {
+      loginErrorBox.style.display = "none";
+      loginErrorBox.textContent = "";
+    }
+    if (mode === "signup") {
+      if (tabSignUp) {
+        tabSignUp.style.background = "var(--accent-indigo)";
+        tabSignUp.style.color = "white";
+      }
+      if (tabSignIn) {
+        tabSignIn.style.background = "var(--bg-card)";
+        tabSignIn.style.color = "var(--text-muted)";
+      }
+      if (loginForm) loginForm.style.display = "none";
+      if (registerForm) registerForm.style.display = "block";
+      if (authModalTitle) authModalTitle.textContent = "Create an Account";
+      if (loginPromptNotice) loginPromptNotice.textContent = "Sign up for a new HandWriteMe account with your personal workspace.";
+      if (authHelperNotice) authHelperNotice.textContent = "New users receive an isolated personal workspace for private handwriting synthesis.";
+      const signupEmail = document.getElementById("signupEmail");
+      if (signupEmail) setTimeout(() => signupEmail.focus(), 60);
+    } else {
+      if (tabSignIn) {
+        tabSignIn.style.background = "var(--accent-indigo)";
+        tabSignIn.style.color = "white";
+      }
+      if (tabSignUp) {
+        tabSignUp.style.background = "var(--bg-card)";
+        tabSignUp.style.color = "var(--text-muted)";
+      }
+      if (loginForm) loginForm.style.display = "block";
+      if (registerForm) registerForm.style.display = "none";
+      if (authModalTitle) authModalTitle.textContent = "Sign In to HandWriteMe";
+      if (loginPromptNotice) loginPromptNotice.textContent = "Authenticate with your account to manage profiles, documents, and synthesis.";
+      if (authHelperNotice) authHelperNotice.textContent = "Sign in to access your handwriting profiles, documents, and synthesis.";
+      const emailInput = document.getElementById("loginEmail");
+      if (emailInput) setTimeout(() => emailInput.focus(), 60);
+    }
+  }
+
+  if (tabSignIn) {
+    tabSignIn.addEventListener("click", () => setAuthMode("signin"));
+  }
+  if (tabSignUp) {
+    tabSignUp.addEventListener("click", () => setAuthMode("signup"));
+  }
+
+  function openLoginModal(message = "", mode = "signin") {
+    setAuthMode(mode);
     if (loginPromptNotice && message) {
       loginPromptNotice.textContent = message;
     }
@@ -482,16 +537,9 @@ document.addEventListener("DOMContentLoaded", () => {
       loginErrorBox.textContent = "";
     }
     loginModal.style.display = "flex";
-    const emailInput = document.getElementById("loginEmail");
-    const passInput = document.getElementById("loginPassword");
-    if (emailInput && !emailInput.value) emailInput.value = "admin@example.com";
-    if (passInput) {
-      passInput.value = "";
-      setTimeout(() => passInput.focus(), 60);
-    }
   }
 
-  function requireAuth(message = "Please sign in with your MSFLib account to proceed.") {
+  function requireAuth(message = "Please sign in with your account to proceed.") {
     if (!api.getToken()) {
       openLoginModal(message);
       showToast(message, "error");
@@ -550,7 +598,7 @@ document.addEventListener("DOMContentLoaded", () => {
       renderDocumentsList([]);
       refreshDashboard();
     } else {
-      openLoginModal("Sign in with your MSFLib superuser credentials.");
+      openLoginModal("Sign in or create an account to start synthesizing handwriting.");
     }
   });
 
@@ -596,7 +644,7 @@ document.addEventListener("DOMContentLoaded", () => {
         loginErrorBox.style.display = "block";
         let msg = err.message || "Authentication failed.";
         if (msg.includes("400") || msg.toLowerCase().includes("incorrect")) {
-          msg = "Incorrect email or password. Verify the credentials configured in .env (FIRST_SUPERUSER / FIRST_SUPERUSER_PASSWORD).";
+          msg = "Incorrect email or password. Please verify your credentials.";
         }
         loginErrorBox.textContent = msg;
       }
@@ -610,6 +658,91 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
   });
+
+  if (registerForm) {
+    registerForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const nameInput = document.getElementById("signupName");
+      const emailInput = document.getElementById("signupEmail");
+      const passInput = document.getElementById("signupPassword");
+      const confirmInput = document.getElementById("signupPasswordConfirm");
+
+      const fullName = nameInput ? nameInput.value.trim() : "";
+      const email = emailInput ? emailInput.value.trim() : "";
+      const password = passInput ? passInput.value : "";
+      const confirmPassword = confirmInput ? confirmInput.value : "";
+
+      if (!email || !password || !confirmPassword) {
+        if (loginErrorBox) {
+          loginErrorBox.style.display = "block";
+          loginErrorBox.textContent = "Please provide email, password, and password confirmation.";
+        }
+        return;
+      }
+
+      if (password.length < 8) {
+        if (loginErrorBox) {
+          loginErrorBox.style.display = "block";
+          loginErrorBox.textContent = "Password must be at least 8 characters long.";
+        }
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        if (loginErrorBox) {
+          loginErrorBox.style.display = "block";
+          loginErrorBox.textContent = "Passwords do not match. Please verify your password.";
+        }
+        return;
+      }
+
+      if (loginErrorBox) {
+        loginErrorBox.style.display = "none";
+        loginErrorBox.textContent = "";
+      }
+
+      if (btnSubmitRegister) {
+        btnSubmitRegister.disabled = true;
+        btnSubmitRegister.textContent = "Creating Account...";
+      }
+
+      try {
+        await api.register({
+          email: email,
+          password: password,
+          password_confirm: confirmPassword,
+          full_name: fullName || undefined,
+        });
+
+        showToast("Account created successfully! Signing in...");
+
+        // Automatically log in with the new credentials
+        await api.login(email, password);
+        loginModal.style.display = "none";
+        showToast(`Welcome to HandWriteMe, ${fullName || email}!`);
+        await checkCurrentUser();
+        await refreshDashboard();
+        await refreshProfiles();
+        await refreshDocuments();
+      } catch (err) {
+        console.error("Registration error:", err);
+        if (loginErrorBox) {
+          loginErrorBox.style.display = "block";
+          let msg = err.message || "Registration failed.";
+          if (msg.toLowerCase().includes("already exists")) {
+            msg = "An account with this email address already exists. Please sign in instead.";
+          }
+          loginErrorBox.textContent = msg;
+        }
+        showToast("Registration failed", "error");
+      } finally {
+        if (btnSubmitRegister) {
+          btnSubmitRegister.disabled = false;
+          btnSubmitRegister.textContent = "Create Account";
+        }
+      }
+    });
+  }
 
   // --- PROFILES CONTROLLER ---
   async function refreshProfiles() {
