@@ -1,5 +1,6 @@
 from pathlib import Path
 from fastapi import FastAPI
+from fastapi.openapi.docs import get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from msflib.eventbus import bind_app_emitter
@@ -49,7 +50,11 @@ def sync_superuser_password_on_startup(session: Optional[Session] = None) -> boo
 # 3. Run startup synchronization if explicitly enabled via environment variable
 sync_superuser_password_on_startup()
 
-app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json")
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    docs_url=None,
+)
 app_emitter = bind_app_emitter(app)
 bootstrap_module_hooks(app_emitter)
 
@@ -81,4 +86,24 @@ if STATIC_DIR.is_dir():
     @app.get("/", include_in_schema=False)
     def index():
         return FileResponse(str(STATIC_DIR / "index.html"))
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return FileResponse(str(STATIC_DIR / "favicon.ico"))
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - Swagger UI",
+        oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+        swagger_favicon_url="/static/favicon.svg",
+    )
+
+
+if app.swagger_ui_oauth2_redirect_url:
+    @app.get(app.swagger_ui_oauth2_redirect_url, include_in_schema=False)
+    async def swagger_ui_redirect():
+        return get_swagger_ui_oauth2_redirect_html()
 
