@@ -269,6 +269,11 @@ document.addEventListener("DOMContentLoaded", () => {
       section.classList.toggle("active", section.id === `view-${viewName}`);
     });
 
+    // Reset scroll position of main content container
+    const mainEl = document.querySelector("main.app-main");
+    if (mainEl) mainEl.scrollTop = 0;
+    window.scrollTo(0, 0);
+
     if (viewName === "dashboard") refreshDashboard();
     if (viewName === "profiles") {
       refreshProfiles();

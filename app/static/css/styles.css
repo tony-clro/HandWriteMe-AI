@@ -146,6 +146,7 @@ body {
 /* Header & Navigation */
 header.app-header {
   height: 68px;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-header);
   backdrop-filter: blur(12px);
@@ -831,6 +832,34 @@ p, span, label, strong {
   width: 100%;
   min-width: 480px;
   border-collapse: collapse;
+}
+
+/* DESKTOP FIXED SIDEBAR & INDEPENDENT MAIN SCROLL (>= 1024px) */
+@media (min-width: 1024px) {
+  body {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app-container {
+    height: calc(100vh - 68px);
+    height: calc(100dvh - 68px);
+    overflow: hidden;
+  }
+
+  aside.app-sidebar {
+    height: calc(100vh - 68px);
+    height: calc(100dvh - 68px);
+    transform: none !important;
+  }
+
+  main.app-main {
+    height: calc(100vh - 68px);
+    height: calc(100dvh - 68px);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
 }
 
 /* TABLET & MOBILE (< 1024px) */
