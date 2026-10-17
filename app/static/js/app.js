@@ -41,6 +41,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const themeToggleIcon = document.getElementById("themeToggleIcon");
   const themeToggleText = document.getElementById("themeToggleText");
 
+  // Mobile navigation elements
+  const mobileMenuBtn = document.getElementById("mobileMenuBtn");
+  const closeSidebarBtn = document.getElementById("closeSidebarBtn");
+  const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+  const appSidebar = document.getElementById("appSidebar");
+
   // Dashboard elements
   const statProfilesCount = document.getElementById("statProfilesCount");
   const statProfilesBadge = document.getElementById("statProfilesBadge");
@@ -191,8 +197,70 @@ document.addEventListener("DOMContentLoaded", () => {
   const initialTheme = document.documentElement.getAttribute("data-theme") || getStoredTheme();
   applyTheme(initialTheme, false);
 
+  // --- RESPONSIVE MOBILE SIDEBAR DRAWER ---
+  function openMobileSidebar() {
+    if (!appSidebar) return;
+    appSidebar.classList.add("open");
+    if (sidebarBackdrop) sidebarBackdrop.classList.add("active");
+    if (mobileMenuBtn) mobileMenuBtn.setAttribute("aria-expanded", "true");
+    if (closeSidebarBtn) {
+      closeSidebarBtn.focus();
+    }
+  }
+
+  function closeMobileSidebar() {
+    if (!appSidebar) return;
+    appSidebar.classList.remove("open");
+    if (sidebarBackdrop) sidebarBackdrop.classList.remove("active");
+    if (mobileMenuBtn) {
+      mobileMenuBtn.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener("click", () => {
+      const isOpen = appSidebar && appSidebar.classList.contains("open");
+      if (isOpen) {
+        closeMobileSidebar();
+      } else {
+        openMobileSidebar();
+      }
+    });
+  }
+
+  if (closeSidebarBtn) {
+    closeSidebarBtn.addEventListener("click", closeMobileSidebar);
+  }
+
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener("click", closeMobileSidebar);
+  }
+
+  // Close drawer on Escape key press
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (appSidebar && appSidebar.classList.contains("open")) {
+        closeMobileSidebar();
+        if (mobileMenuBtn) mobileMenuBtn.focus();
+      }
+      if (loginModal && loginModal.style.display !== "none") {
+        loginModal.style.display = "none";
+      }
+    }
+  });
+
+  // Automatically close mobile sidebar when window expands to desktop size
+  window.addEventListener("resize", () => {
+    if (window.innerWidth >= 1024) {
+      closeMobileSidebar();
+    }
+  });
+
   // --- NAVIGATION CONTROLLER ---
   function switchView(viewName) {
+    // Automatically close mobile drawer upon navigation
+    closeMobileSidebar();
+
     state.currentView = viewName;
     navItems.forEach((item) => {
       item.classList.toggle("active", item.dataset.view === viewName);
