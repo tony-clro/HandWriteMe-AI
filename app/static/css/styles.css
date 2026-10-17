@@ -836,27 +836,38 @@ p, span, label, strong {
 
 /* DESKTOP FIXED SIDEBAR & INDEPENDENT MAIN SCROLL (>= 1024px) */
 @media (min-width: 1024px) {
+  html,
   body {
     height: 100vh;
     height: 100dvh;
+    min-height: 0;
     overflow: hidden;
   }
 
   .app-container {
     height: calc(100vh - 68px);
     height: calc(100dvh - 68px);
+    min-height: 0;
     overflow: hidden;
   }
 
   aside.app-sidebar {
+    position: fixed;
+    top: 68px;
+    left: 0;
+    bottom: 0;
+    width: 260px;
     height: calc(100vh - 68px);
     height: calc(100dvh - 68px);
     transform: none !important;
   }
 
   main.app-main {
+    margin-left: 260px;
+    width: calc(100% - 260px);
     height: calc(100vh - 68px);
     height: calc(100dvh - 68px);
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
   }
